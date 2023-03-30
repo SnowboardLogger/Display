@@ -134,6 +134,8 @@ int main(void)
   /* USER CODE BEGIN 2 */
   uint8_t _displayFunction = LCD_4BITMODE | LCD_1LINE | LCD_5x8DOTS;
   uint8_t _backlightval = LCD_NOBACKLIGHT;
+  uint8_t _displaycontrol = LCD_DISPLAYON | LCD_CURSOROFF | LCD_BLINKOFF;
+  uint8_t _displaymode = LCD_ENTRYLEFT | LCD_ENTRYSHIFTDECREMENT;
 
   _displayFunction |= LCD_2LINE;
   HAL_Delay(50);
@@ -149,20 +151,25 @@ int main(void)
   HAL_I2C_Master_Transmit(&hi2c1, 0x4E, &buf[0], 1, 1000);
   HAL_Delay(2);
 
-  command(LCD_FUNCTIONSET | _displayFunction);
-
-  _displaycontrol = LCD_DISPLAYON | LCD_CURSOROFF | LCDBLINKOFF;
-  display();
-
-  clear();
-
-  _displaymode = LCD_ENTRYLEFT | LCD_ENTRYSHIFTDECREMENT;
-
-  command(LCD_ENTRYMODESET | _displaymode);
-
-  hom
-
   buf[0] = (0x02 << 4) | _backlightval;
+
+  buf[0] = (LCD_FUNCTIONSET | _displayFunction);
+  HAL_I2C_Master_Transmit(&hi2c1, 0x4E, &buf[0], 1, 1000);
+
+  _displaycontrol |= LCD_DISPLAYON;
+  buf[0] = (LCD_DISPLAYCONTROL | _displaycontrol);
+  HAL_I2C_Master_Transmit(&hi2c1, 0x4E, &buf[0], 1, 1000);
+
+  buf[0] = LCD_CLEARDISPLAY;
+  HAL_I2C_Master_Transmit(&hi2c1, 0x4E, &buf[0], 1, 1000);
+  HAL_Delay(2);
+
+  buf[0] = (LCD_ENTRYMODESET | _displaymode);
+  HAL_I2C_Master_Transmit(&hi2c1, 0x4E, &buf[0], 1, 1000);
+
+  buf[0] = LCD_RETURNHOME;
+  HAL_I2C_Master_Transmit(&hi2c1, 0x4E, &buf[0], 1, 1000);
+  HAL_Delay(2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
