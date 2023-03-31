@@ -31,54 +31,12 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define SLAVE_ADDRESS_LCD 0x4E // change this according to ur setup
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define LCD_CLEARDISPLAY 0x01
-#define LCD_RETURNHOME 0x02
-#define LCD_ENTRYMODESET 0x04
-#define LCD_DISPLAYCONTROL 0x08
-#define LCD_CURSORSHIFT 0x10
-#define LCD_FUNCTIONSET 0x20
-#define LCD_SETCGRAMADDR 0x40
-#define LCD_SETDDRAMADDR 0x80
 
-// flags for display entry mode
-#define LCD_ENTRYRIGHT 0x00
-#define LCD_ENTRYLEFT 0x02
-#define LCD_ENTRYSHIFTINCREMENT 0x01
-#define LCD_ENTRYSHIFTDECREMENT 0x00
-
-// flags for display on/off control
-#define LCD_DISPLAYON 0x04
-#define LCD_DISPLAYOFF 0x00
-#define LCD_CURSORON 0x02
-#define LCD_CURSOROFF 0x00
-#define LCD_BLINKON 0x01
-#define LCD_BLINKOFF 0x00
-
-// flags for display/cursor shift
-#define LCD_DISPLAYMOVE 0x08
-#define LCD_CURSORMOVE 0x00
-#define LCD_MOVERIGHT 0x04
-#define LCD_MOVELEFT 0x00
-
-// flags for function set
-#define LCD_8BITMODE 0x10
-#define LCD_4BITMODE 0x00
-#define LCD_2LINE 0x08
-#define LCD_1LINE 0x00
-#define LCD_5x10DOTS 0x04
-#define LCD_5x8DOTS 0x00
-
-// flags for backlight control
-#define LCD_BACKLIGHT 0x08
-#define LCD_NOBACKLIGHT 0x00
-
-#define En B00000100  // Enable bit
-#define Rw B00000010  // Read/Write bit
-#define Rs B00000001  // Register select bit
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -98,7 +56,90 @@ static void MX_I2C1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void lcd_send_cmd (char cmd)
+{
+  char data_u, data_l;
+	uint8_t data_t[4];
+	data_u = (cmd&0xf0);
+	data_l = ((cmd<<4)&0xf0);
+	data_t[0] = data_u|0x0C;  //en=1, rs=0
+	data_t[1] = data_u|0x08;  //en=0, rs=0
+	data_t[2] = data_l|0x0C;  //en=1, rs=0
+	data_t[3] = data_l|0x08;  //en=0, rs=0
+	HAL_I2C_Master_Transmit (&hi2c1, SLAVE_ADDRESS_LCD,(uint8_t *) data_t, 4, 100);
+}
 
+void lcd_send_data (char data)
+{
+	char data_u, data_l;
+	uint8_t data_t[4];
+	data_u = (data&0xf0);
+	data_l = ((data<<4)&0xf0);
+	data_t[0] = data_u|0x0D;  //en=1, rs=0
+	data_t[1] = data_u|0x09;  //en=0, rs=0
+	data_t[2] = data_l|0x0D;  //en=1, rs=0
+	data_t[3] = data_l|0x09;  //en=0, rs=0
+	HAL_I2C_Master_Transmit (&hi2c1, SLAVE_ADDRESS_LCD,(uint8_t *) data_t, 4, 100);
+}
+
+void lcd_clear (void)
+{
+	lcd_send_cmd (0x80);
+	for (int i=0; i<70; i++)
+	{
+		lcd_send_data (' ');
+	}
+}
+
+void lcd_put_cur(int row, int col)
+{
+    switch (row)
+    {
+        case 0:
+            col |= 0x80;
+            break;
+        case 1:
+            col |= 0xC0;
+            break;
+    }
+
+    lcd_send_cmd (col);
+}
+
+
+void lcd_init (void)
+{
+	// 4 bit initialisation
+	HAL_Delay(50);  // wait for >40ms
+	lcd_send_cmd (0x30);
+	HAL_Delay(5);  // wait for >4.1ms
+	lcd_send_cmd (0x30);
+	HAL_Delay(1);  // wait for >100us
+	lcd_send_cmd (0x30);
+	HAL_Delay(10);
+	lcd_send_cmd (0x20);  // 4bit mode
+	HAL_Delay(10);
+
+  // dislay initialisation
+	lcd_send_cmd (0x28); // Function set --> DL=0 (4 bit mode), N = 1 (2 line display) F = 0 (5x8 characters)
+	HAL_Delay(1);
+	lcd_send_cmd (0x08); //Display on/off control --> D=0,C=0, B=0  ---> display off
+	HAL_Delay(1);
+	lcd_send_cmd (0x01);  // clear display
+	HAL_Delay(1);
+	HAL_Delay(1);
+	lcd_send_cmd (0x06); //Entry mode set --> I/D = 1 (increment cursor) & S = 0 (no shift)
+	HAL_Delay(1);
+	lcd_send_cmd (0x0C); //Display on/off control --> D = 1, C and B = 0. (Cursor and blink, last two bits)
+}
+
+void lcd_send_string (char *str)
+{
+	while (*str) lcd_send_data (*str++);
+}
+
+int row=0;
+int col=0;
 /* USER CODE END 0 */
 
 /**
@@ -108,7 +149,6 @@ static void MX_I2C1_Init(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-	uint8_t buf[20];
 
   /* USER CODE END 1 */
 
@@ -132,44 +172,20 @@ int main(void)
   MX_GPIO_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-  uint8_t _displayFunction = LCD_4BITMODE | LCD_1LINE | LCD_5x8DOTS;
-  uint8_t _backlightval = LCD_NOBACKLIGHT;
-  uint8_t _displaycontrol = LCD_DISPLAYON | LCD_CURSOROFF | LCD_BLINKOFF;
-  uint8_t _displaymode = LCD_ENTRYLEFT | LCD_ENTRYSHIFTDECREMENT;
+  lcd_init ();
 
-  _displayFunction |= LCD_2LINE;
-  HAL_Delay(50);
-  buf[0] = _displayFunction;
-  HAL_I2C_Master_Transmit(&hi2c1, 0x4E, &buf[0], 1, 1000);
-  HAL_Delay(1000);
+    lcd_send_string ("HELLO WORLD");
 
-  buf[0] = (0x03 << 4) | _backlightval;
-  HAL_I2C_Master_Transmit(&hi2c1, 0x4E, &buf[0], 1, 1000);
-  HAL_Delay(5);
-  HAL_I2C_Master_Transmit(&hi2c1, 0x4E, &buf[0], 1, 1000);
-  HAL_Delay(5);
-  HAL_I2C_Master_Transmit(&hi2c1, 0x4E, &buf[0], 1, 1000);
-  HAL_Delay(2);
+    HAL_Delay(1000);
 
-  buf[0] = (0x02 << 4) | _backlightval;
+    lcd_put_cur(1, 0);
 
-  buf[0] = (LCD_FUNCTIONSET | _displayFunction);
-  HAL_I2C_Master_Transmit(&hi2c1, 0x4E, &buf[0], 1, 1000);
+    lcd_send_string("from CTECH");
 
-  _displaycontrol |= LCD_DISPLAYON;
-  buf[0] = (LCD_DISPLAYCONTROL | _displaycontrol);
-  HAL_I2C_Master_Transmit(&hi2c1, 0x4E, &buf[0], 1, 1000);
+    HAL_Delay(2000);
 
-  buf[0] = LCD_CLEARDISPLAY;
-  HAL_I2C_Master_Transmit(&hi2c1, 0x4E, &buf[0], 1, 1000);
-  HAL_Delay(2);
+    lcd_clear ();
 
-  buf[0] = (LCD_ENTRYMODESET | _displaymode);
-  HAL_I2C_Master_Transmit(&hi2c1, 0x4E, &buf[0], 1, 1000);
-
-  buf[0] = LCD_RETURNHOME;
-  HAL_I2C_Master_Transmit(&hi2c1, 0x4E, &buf[0], 1, 1000);
-  HAL_Delay(2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -179,9 +195,19 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  buf[0] = 0x08 | 0x04 | 0x02 | 0x01;
-	  HAL_I2C_Master_Transmit(&hi2c1, 0x4E, &buf[0], 1, 1000);
-//	  HAL_Delay(10000);
+	  for (int i=0;i<128;i++)
+	  	  {
+	  		  lcd_put_cur(row, col);
+
+	  		  lcd_send_data(i+48);
+
+	  		  col++;
+
+	  		  if (col > 15) {row++; col = 0;}
+	  		  if (row > 1) row=0;
+
+	  		  HAL_Delay(250);
+	  	  }
   }
   /* USER CODE END 3 */
 }
@@ -327,6 +353,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
 /* USER CODE END 4 */
 
 /**
